@@ -1,47 +1,53 @@
-
-const puppeteer = require('puppeteer');
+const puppeteer = require("puppeteer");
 
 async function consultarHSCode(hsCode) {
-  const browser = await puppeteer.launch({ headless: true });
+  // Arranca Chromium sin sandbox (necesario en Render)
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+  });
   const page = await browser.newPage();
 
-  const url = 'https://muisca.dian.gov.co/WebArancel/DefMenuConsultas.faces';
-  await page.goto(url, { waitUntil: 'networkidle2' });
+  // Paso 1: Abrir la página de consulta
+  await page.goto("https://muisca.dian.gov.co/WebArancel/DefMenuConsultas.faces");
 
-  await page.waitForSelector('table');
-  await page.evaluate(() => {
-    const links = Array.from(document.querySelectorAll('a'));
-    const generalLink = links.find(link => link.textContent.trim() === 'General');
-    if (generalLink) generalLink.click();
+  // Paso 2: Hacer clic en "General"
+  await page.waitForSelector('input[name$="btnGeneral"]');
+  await page.click('input[name$="btnGeneral"]');
+
+  // Paso 3: Esperar el campo y escribir el código
+  await page.waitForSelector('input[name$="codNomenclatura"]');
+  await page.type('input[name$="codNomenclatura"]', hsCode);
+
+  // Paso 4: Clic en "Buscar" y esperar respuesta
+  await Promise.all([
+    page.click('input[name$="btnBuscar"]'),
+    page.waitForNavigation({ waitUntil: "networkidle2" })
+  ]);
+
+  // Paso 5: Verificar si hay tabla de resultados
+  const tabla = await page.$("table[id*='dtDatos']");
+  if (!tabla) {
+    console.warn("⚠️ No se encontró tabla de resultados.");
+    console.log("✅ No hay requisitos especiales para este código.");
+    await browser.close();
+    return;
+  }
+
+  // Paso 6: Extraer datos de la tabla
+  const data = await page.evaluate(() => {
+    const filas = Array.from(document.querySelectorAll("table[id*='dtDatos'] tr"));
+    return filas.map(fila =>
+      Array.from(fila.querySelectorAll("td")).map(td => td.innerText.trim())
+    );
   });
 
-  await page.waitForSelector('input[id*=codNomenclatura]');
-  await page.click('input[id*=codNomenclatura]');
-  await page.type('input[id*=codNomenclatura]', hsCode);
-  await page.keyboard.press('Enter');
-
-  let data = [];
-  try {
-    await page.waitForSelector('table[id*=dtDatos]', { timeout: 30000 });
-    data = await page.evaluate(() => {
-      const rows = Array.from(document.querySelectorAll('table[id*=dtDatos] tr'));
-      return rows.map(row => {
-        const cols = row.querySelectorAll('td');
-        return Array.from(cols).map(col => col.innerText.trim());
-      });
-    });
-  } catch (error) {
-    console.log('⚠️ No se encontró ninguna tabla de resultados después de enviar el formulario.');
-  }
-
   await browser.close();
-
-  if (data.length > 1) {
-    console.log('🔍 Datos capturados de la DIAN:');
-    console.table(data);
-  } else {
-    console.log('✅ No hay requisitos especiales para este código arancelario.');
-  }
+  console.log("✅ Resultados encontrados:");
+  console.log(data);
 }
 
-consultarHSCode('8471300000');
+// Prueba con un código de ejemplo
+consultarHSCode("8471300000").catch(err => {
+  console.error("❌ Error al consultar la DIAN:", err);
+});
