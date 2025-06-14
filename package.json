@@ -1,13 +1,12 @@
-
 {
   "name": "robot-dian",
   "version": "1.0.0",
-  "description": "Herramienta para consultar requisitos de importación y calcular costos.",
+  "description": "Scraping robot para consultar requisitos de importaci\u00f3n",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "puppeteer": "^21.0.0"
+    "puppeteer": "^21.3.8"
   }
 }
